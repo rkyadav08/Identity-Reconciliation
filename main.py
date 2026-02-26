@@ -1,13 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import os
 from supabase import create_client, Client
 from datetime import datetime, timezone
 
 app = FastAPI(title="Identity Reconciliation")
 
-# Initialize Supabase client — set these as environment variables
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
@@ -56,7 +54,7 @@ def build_response(primary: dict, all_contacts: list[dict]) -> IdentifyResponse:
     phones = []
     secondary_ids = []
 
-    # Primary's info comes first
+
     if primary.get("email") and primary["email"] not in emails:
         emails.append(primary["email"])
     if primary.get("phoneNumber") and primary["phoneNumber"] not in phones:
@@ -91,7 +89,7 @@ async def identify(request: IdentifyRequest):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # Find all contacts matching email OR phone
+
     matched: list[dict] = []
 
     if email:
@@ -104,7 +102,7 @@ async def identify(request: IdentifyRequest):
             if not any(x["id"] == c["id"] for x in matched):
                 matched.append(c)
 
-    # No existing contacts — create a new primary
+    
     if not matched:
         new_contact = {
             "phoneNumber": phone,
@@ -119,18 +117,18 @@ async def identify(request: IdentifyRequest):
         created = res.data[0]
         return build_response(created, [created])
 
-    # Resolve the primary for each matched contact
+
     primaries: list[dict] = []
     for c in matched:
         p = find_primary(c)
         if not any(x["id"] == p["id"] for x in primaries):
             primaries.append(p)
 
-    # The oldest primary (by createdAt) wins
+
     primaries.sort(key=lambda x: x["createdAt"])
     true_primary = primaries[0]
 
-    # Demote any newer primaries to secondary and re-link their children
+
     if len(primaries) > 1:
         for p in primaries[1:]:
             supabase.table("Contact").update({
@@ -139,13 +137,13 @@ async def identify(request: IdentifyRequest):
                 "updatedAt": now,
             }).eq("id", p["id"]).execute()
 
-            # Re-link secondaries that were pointing to the demoted primary
+
             supabase.table("Contact").update({
                 "linkedId": true_primary["id"],
                 "updatedAt": now,
             }).eq("linkedId", p["id"]).execute()
 
-    # Refresh cluster after potential merges
+
     all_contacts = get_all_contacts_in_cluster(true_primary["id"])
 
     existing_emails = {c["email"] for c in all_contacts if c.get("email")}
@@ -154,7 +152,7 @@ async def identify(request: IdentifyRequest):
     new_email = email and email not in existing_emails
     new_phone = phone and phone not in existing_phones
 
-    # Create a secondary only if there's genuinely new information
+
     if new_email or new_phone:
         new_secondary = {
             "phoneNumber": phone,
