@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from supabase import create_client, Client
+import os
 from datetime import datetime, timezone
 
 app = FastAPI(title="Identity Reconciliation")
